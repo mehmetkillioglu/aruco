@@ -144,7 +144,7 @@ void drawText(Mat frame, string text, Point point)
  * Callback executed every time a new camera frame is received.
  * This callback is used to process received images and publish messages with camera position data if any.
  */
-void onFrame(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
+void onFrame(const sensor_msgs::msg::Image::SharedPtr msg)
 {
 	try
 	{
@@ -153,6 +153,7 @@ void onFrame(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
 
 		//Process image and get markers
 		vector<ArucoMarker> markers = ArucoDetector::getMarkers(frame, cosine_limit, theshold_block_size, min_area, max_error_quad);
+
 
 		//Visible
 		vector<ArucoMarker> found;
@@ -174,7 +175,8 @@ void onFrame(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
 		//Check known markers and build known of points
 		for(unsigned int i = 0; i < markers.size(); i++)
 		{
-			for(unsigned int j = 0; j < known.size(); j++)
+            std::cerr << "got marker: " << markers[i].id << " markers " << std::endl;
+            for(unsigned int j = 0; j < known.size(); j++)
 			{
 				if(markers[i].id == known[j].id)
 				{
@@ -483,7 +485,7 @@ int main(int argc, char **argv)
     rclcpp::init(argc, argv);
 
 	//ROS node instance
-    rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("aruco");
+    rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("maruco");
 	
 	//Parameters
     node->get_parameter_or<bool>("debug", debug, false);
@@ -578,7 +580,7 @@ int main(int argc, char **argv)
     node->get_parameter_or<string>("topic_camera", topic_camera, "/rgb/image");
     node->get_parameter_or<string>("topic_camera_info", topic_camera_info, "/rgb/camera_info");
     node->get_parameter_or<string>("topic_marker_register", topic_marker_register, "/marker_register");
-    node->get_parameter_or<string>("topic_marker_remove", topic_marker_register, "/marker_remove");
+    node->get_parameter_or<string>("topic_marker_remove", topic_marker_remove, "/marker_remove");
 
 	//Publish topic names
 	string topic_visible, topic_position, topic_rotation, topic_pose;
@@ -587,20 +589,28 @@ int main(int argc, char **argv)
     node->get_parameter_or<string>("topic_rotation", topic_rotation, "/rotation");
     node->get_parameter_or<string>("topic_pose", topic_pose, "/pose");
 
+    std::cout << "camera: " << topic_camera << std::endl << "info: " << topic_camera_info << std::endl
+              << "marker_register: " << topic_marker_register << std::endl << "marker_remove:" << topic_marker_remove << std::endl
+              << "topic_visible: " << topic_visible << std::endl << "topic_position: " << topic_position << std::endl;
+
 	//Advertise topics
     pub_visible = node->create_publisher<std_msgs::msg::Bool>( topic_visible, rmw_qos_profile_default);
     pub_position = node->create_publisher<geometry_msgs::msg::Point>( topic_position, rmw_qos_profile_default);
     pub_rotation = node->create_publisher<geometry_msgs::msg::Point>(topic_rotation, rmw_qos_profile_default);
     pub_pose = node->create_publisher<geometry_msgs::msg::PoseStamped>( topic_pose, rmw_qos_profile_default);
     //Subscribe topics
-	image_transport::ImageTransport it(node);
-	image_transport::Subscriber sub_camera = it.subscribe(topic_camera, 1, onFrame);
+    //image_transport::ImageTransport it(node);
+    //image_transport::Subscriber sub_camera = it.subscribe(topic_camera, 1, onFrame);
+    auto sub_image = node->create_subscription<sensor_msgs::msg::Image>(topic_camera, onFrame, rmw_qos_profile_default);
 
     auto sub_camera_info = node->create_subscription<sensor_msgs::msg::CameraInfo>(topic_camera_info, onCameraInfo, rmw_qos_profile_default);
     auto sub_marker_register = node->create_subscription<aruco::msg::Marker>(topic_marker_register, onMarkerRegister, rmw_qos_profile_default);
     auto sub_marker_remove = node->create_subscription<std_msgs::msg::Int32>(topic_marker_remove, onMarkerRemove, rmw_qos_profile_default);
 
-    rclcpp::spin_some(node);
+    rclcpp::spin(node);
+
+    std::cerr << "Shutdown" << std::endl;
+    rclcpp::shutdown();
 
 	return 0;
 }
