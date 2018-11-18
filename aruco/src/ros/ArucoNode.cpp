@@ -7,20 +7,20 @@
 #include <opencv2/photo/photo.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 
-#include "ros/ros.h"
+#include "rclcpp/rclcpp.hpp"
 
-#include "std_msgs/String.h"
-#include "std_msgs/Bool.h"
-#include "std_msgs/Int32.h"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/int32.hpp"
 
-#include "geometry_msgs/Point.h"
-#include "geometry_msgs/PoseStamped.h"
-#include "sensor_msgs/image_encodings.h"
+#include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "sensor_msgs/image_encodings.hpp"
 
 #include "image_transport/image_transport.h"
 #include "cv_bridge/cv_bridge.h"
 
-#include "aruco/Marker.h"
+#include "aruco/msg/marker.hpp"
 
 #include "../ArucoMarker.cpp"
 #include "../ArucoMarkerInfo.cpp"
@@ -50,22 +50,22 @@ vector<ArucoMarkerInfo> known = vector<ArucoMarkerInfo>();
  * ROS node visibility publisher.
  * Publishes true when a known marker is visible, publishes false otherwise.
  */
-ros::Publisher pub_visible;
+rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_visible;
 
 /**
  * ROS node position publisher.
  */
-ros::Publisher pub_position;
+rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr pub_position;
 
 /**
  * ROS node rotation publisher.
  */
-ros::Publisher pub_rotation;
+rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr pub_rotation;
 
 /**
  * ROS node pose publisher.
  */
-ros::Publisher pub_pose;
+rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_pose;
 
 /**
  * Pose publisher sequence counter.
@@ -144,7 +144,7 @@ void drawText(Mat frame, string text, Point point)
  * Callback executed every time a new camera frame is received.
  * This callback is used to process received images and publish messages with camera position data if any.
  */
-void onFrame(const sensor_msgs::ImageConstPtr& msg)
+void onFrame(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
 {
 	try
 	{
@@ -219,7 +219,7 @@ void onFrame(const sensor_msgs::ImageConstPtr& msg)
 			Mat camera_position = -rodrigues.t() * position;
 
 			//Publish position and rotation
-			geometry_msgs::Point message_position, message_rotation;
+            geometry_msgs::msg::Point message_position, message_rotation;
 
 			//Opencv coordinates
 			if(use_opencv_coords)
@@ -244,16 +244,19 @@ void onFrame(const sensor_msgs::ImageConstPtr& msg)
 				message_rotation.z = -camera_rotation.at<double>(1, 0);
 			}
 
-			pub_position.publish(message_position);
-			pub_rotation.publish(message_rotation);
+            pub_position->publish(message_position);
+            pub_rotation->publish(message_rotation);
 
 			//Publish pose
-			geometry_msgs::PoseStamped message_pose;
+            geometry_msgs::msg::PoseStamped message_pose;
 
 			//Header
 			message_pose.header.frame_id = "aruco";
-			message_pose.header.seq = pub_pose_seq++;
-			message_pose.header.stamp = ros::Time::now();
+            //message_pose.header.seq = pub_pose_seq++;
+            using builtin_interfaces::msg::Time;
+            rclcpp::Clock ros_clock(RCL_ROS_TIME);
+            Time ros_now = ros_clock.now();
+            message_pose.header.stamp = ros_now;
 
 			//Position
 			message_pose.pose.position.x = message_position.x;
@@ -284,7 +287,7 @@ void onFrame(const sensor_msgs::ImageConstPtr& msg)
 				message_pose.pose.orientation.w = 1.0;
 			}
 			
-			pub_pose.publish(message_pose);
+            pub_pose->publish(message_pose);
 
 			//Debug
 			if(debug)
@@ -302,9 +305,9 @@ void onFrame(const sensor_msgs::ImageConstPtr& msg)
 		}
 
 		//Publish visible
-		std_msgs::Bool message_visible;
+        std_msgs::msg::Bool message_visible;
 		message_visible.data = world.size() != 0;
-		pub_visible.publish(message_visible);
+        pub_visible->publish(message_visible);
 
 		//Debug info
 		if(debug)
@@ -361,7 +364,7 @@ void onFrame(const sensor_msgs::ImageConstPtr& msg)
 	}
 	catch(cv_bridge::Exception& e)
 	{
-		ROS_ERROR("Error getting image data");
+        std::cerr << "Error getting image data" << std::endl;
 	}
 }
 
@@ -369,7 +372,7 @@ void onFrame(const sensor_msgs::ImageConstPtr& msg)
  * On camera info callback.
  * Used to receive camera calibration parameters.
  */
-void onCameraInfo(const sensor_msgs::CameraInfo &msg)
+void onCameraInfo(const sensor_msgs::msg::CameraInfo::SharedPtr msg)
 {
 	if(!calibrated)
 	{
@@ -377,12 +380,12 @@ void onCameraInfo(const sensor_msgs::CameraInfo &msg)
 		
 		for(unsigned int i = 0; i < 9; i++)
 		{
-			calibration.at<double>(i / 3, i % 3) = msg.K[i];
+            calibration.at<double>(i / 3, i % 3) = msg->k[i];
 		}
 		
 		for(unsigned int i = 0; i < 5; i++)
 		{
-			distortion.at<double>(0, i) = msg.D[i];
+            distortion.at<double>(0, i) = msg->d[i];
 		}
 
 		if(debug)
@@ -398,34 +401,34 @@ void onCameraInfo(const sensor_msgs::CameraInfo &msg)
  * Callback to register markers on the marker list.
  * This callback received a custom marker message.
  */
-void onMarkerRegister(const aruco::Marker &msg)
+void onMarkerRegister(const aruco::msg::Marker::SharedPtr msg)
 {
 	for(unsigned int i = 0; i < known.size(); i++)
 	{
-		if(known[i].id == msg.id)
+        if(known[i].id == msg->id)
 		{
 			known.erase(known.begin() + i);
-			cout << "Marker " << to_string(msg.id) << " already exists, was replaced." << endl;
+            cout << "Marker " << to_string(msg->id) << " already exists, was replaced." << endl;
 			break;
 		}
 	}
 
-	known.push_back(ArucoMarkerInfo(msg.id, msg.size, Point3d(msg.posx, msg.posy, msg.posz), Point3d(msg.rotx, msg.roty, msg.rotz)));
-	cout << "Marker " << to_string(msg.id) << " added." << endl;
+    known.push_back(ArucoMarkerInfo(msg->id, msg->size, Point3d(msg->posx, msg->posy, msg->posz), Point3d(msg->rotx, msg->roty, msg->rotz)));
+    cout << "Marker " << to_string(msg->id) << " added." << endl;
 }
 
 /**
  * Callback to remove markers from the marker list.
  * Markers are removed by publishing the remove ID to the remove topic.
  */
-void onMarkerRemove(const std_msgs::Int32 &msg)
+void onMarkerRemove(const std_msgs::msg::Int32::SharedPtr msg)
 {
 	for(unsigned int i = 0; i < known.size(); i++)
 	{
-		if(known[i].id == msg.data)
+        if(known[i].id == msg->data)
 		{
 			known.erase(known.begin() + i);
-			cout << "Marker " << to_string(msg.data) << " removed." << endl;
+            cout << "Marker " << to_string(msg->data) << " removed." << endl;
 			break;
 		}
 	}
@@ -477,20 +480,20 @@ void stringToDoubleArray(string data, double* values, unsigned int count, string
  */
 int main(int argc, char **argv)
 {
-	ros::init(argc, argv, "aruco");
+    rclcpp::init(argc, argv);
 
 	//ROS node instance
-	ros::NodeHandle node("aruco");
+    rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("aruco");
 	
 	//Parameters
-	node.param<bool>("debug", debug, false);
-	node.param<bool>("use_opencv_coords", use_opencv_coords, false);
-	node.param<float>("cosine_limit", cosine_limit, 0.7);
-	node.param<int>("theshold_block_size_min", theshold_block_size_min, 3);
-	node.param<int>("theshold_block_size_max", theshold_block_size_max, 21);
-	node.param<float>("max_error_quad", max_error_quad, 0.035); 
-	node.param<int>("min_area", min_area, 100);
-	node.param<bool>("calibrated", calibrated, false);
+    node->get_parameter_or<bool>("debug", debug, false);
+    node->get_parameter_or<bool>("use_opencv_coords", use_opencv_coords, false);
+    node->get_parameter_or<float>("cosine_limit", cosine_limit, 0.7);
+    node->get_parameter_or<int>("theshold_block_size_min", theshold_block_size_min, 3);
+    node->get_parameter_or<int>("theshold_block_size_max", theshold_block_size_max, 21);
+    node->get_parameter_or<float>("max_error_quad", max_error_quad, 0.035);
+    node->get_parameter_or<int>("min_area", min_area, 100);
+    node->get_parameter_or<bool>("calibrated", calibrated, false);
 
 	//Initial threshold block size
 	theshold_block_size = (theshold_block_size_min + theshold_block_size_max) / 2;
@@ -504,11 +507,10 @@ int main(int argc, char **argv)
 	distortion = Mat(1, 5, CV_64F, data_distortion);
 
 	//Camera instrinsic calibration parameters
-	if(node.hasParam("calibration"))
+    string data;
+    node->get_parameter_or<string>("calibration",data,"");
+    if(data != "")
 	{
-		string data;
-		node.param<string>("calibration", data, "");
-		
 		double values[9];
 		stringToDoubleArray(data, values, 9, "_");
 
@@ -521,10 +523,10 @@ int main(int argc, char **argv)
 	}
 
 	//Camera distortion calibration parameters
-	if(node.hasParam("distortion"))
+    node->get_parameter_or<string>("distortion",data,"");
+    if(data != "")
 	{
 		string data;
-		node.param<string>("distortion", data, "");	
 
 		double values[5];
 		stringToDoubleArray(data, values, 5, "_");
@@ -540,10 +542,11 @@ int main(int argc, char **argv)
 	//Aruco makers passed as parameters
 	for(unsigned int i = 0; i < 1024; i++)
 	{
-		if(node.hasParam("marker" + to_string(i)))
+        node->get_parameter_or<string>("marker"+to_string(i),data,"");
+        if(data != "")
 		{
 			string data;
-			node.param<string>("marker" + to_string(i), data, "1_0_0_0_0_0_0");
+            node->get_parameter_or<string>("marker" + to_string(i), data, "1_0_0_0_0_0_0");
 
 			double values[7];
 			stringToDoubleArray(data, values, 7, "_");
@@ -572,32 +575,32 @@ int main(int argc, char **argv)
 
 	//Subscribed topic names
 	string topic_camera, topic_camera_info, topic_marker_register, topic_marker_remove;
-	node.param<string>("topic_camera", topic_camera, "/rgb/image");
-	node.param<string>("topic_camera_info", topic_camera_info, "/rgb/camera_info");
-	node.param<string>("topic_marker_register", topic_marker_register, "/marker_register");
-	node.param<string>("topic_marker_remove", topic_marker_register, "/marker_remove");
+    node->get_parameter_or<string>("topic_camera", topic_camera, "/rgb/image");
+    node->get_parameter_or<string>("topic_camera_info", topic_camera_info, "/rgb/camera_info");
+    node->get_parameter_or<string>("topic_marker_register", topic_marker_register, "/marker_register");
+    node->get_parameter_or<string>("topic_marker_remove", topic_marker_register, "/marker_remove");
 
 	//Publish topic names
 	string topic_visible, topic_position, topic_rotation, topic_pose;
-	node.param<string>("topic_visible", topic_visible, "/visible");
-	node.param<string>("topic_position", topic_position, "/position");
-	node.param<string>("topic_rotation", topic_rotation, "/rotation");
-	node.param<string>("topic_pose", topic_pose, "/pose");
+    node->get_parameter_or<string>("topic_visible", topic_visible, "/visible");
+    node->get_parameter_or<string>("topic_position", topic_position, "/position");
+    node->get_parameter_or<string>("topic_rotation", topic_rotation, "/rotation");
+    node->get_parameter_or<string>("topic_pose", topic_pose, "/pose");
 
 	//Advertise topics
-	pub_visible = node.advertise<std_msgs::Bool>(node.getNamespace() + topic_visible, 10);
-	pub_position = node.advertise<geometry_msgs::Point>(node.getNamespace() + topic_position, 10);
-	pub_rotation = node.advertise<geometry_msgs::Point>(node.getNamespace() + topic_rotation, 10);
-	pub_pose = node.advertise<geometry_msgs::PoseStamped>(node.getNamespace() + topic_pose, 10);
-
-	//Subscribe topics
+    pub_visible = node->create_publisher<std_msgs::msg::Bool>( topic_visible, rmw_qos_profile_default);
+    pub_position = node->create_publisher<geometry_msgs::msg::Point>( topic_position, rmw_qos_profile_default);
+    pub_rotation = node->create_publisher<geometry_msgs::msg::Point>(topic_rotation, rmw_qos_profile_default);
+    pub_pose = node->create_publisher<geometry_msgs::msg::PoseStamped>( topic_pose, rmw_qos_profile_default);
+    //Subscribe topics
 	image_transport::ImageTransport it(node);
 	image_transport::Subscriber sub_camera = it.subscribe(topic_camera, 1, onFrame);
-	ros::Subscriber sub_camera_info = node.subscribe(topic_camera_info, 1, onCameraInfo);
-	ros::Subscriber sub_marker_register = node.subscribe(topic_marker_register, 1, onMarkerRegister);
-	ros::Subscriber sub_marker_remove = node.subscribe(topic_marker_remove, 1, onMarkerRemove);
 
-	ros::spin();
+    auto sub_camera_info = node->create_subscription<sensor_msgs::msg::CameraInfo>(topic_camera_info, onCameraInfo, rmw_qos_profile_default);
+    auto sub_marker_register = node->create_subscription<aruco::msg::Marker>(topic_marker_register, onMarkerRegister, rmw_qos_profile_default);
+    auto sub_marker_remove = node->create_subscription<std_msgs::msg::Int32>(topic_marker_remove, onMarkerRemove, rmw_qos_profile_default);
+
+    rclcpp::spin_some(node);
 
 	return 0;
 }

@@ -1,31 +1,74 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(aruco)
+
+# Default to C99
+if(NOT CMAKE_C_STANDARD)
+  set(CMAKE_C_STANDARD 99)
+endif()
+
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
 
 #Enable C++ 11
 add_compile_options(-std=c++11)
 
 #Packages
-find_package(catkin REQUIRED COMPONENTS	cv_bridge roscpp std_msgs message_generation image_transport)
+find_package(ament_cmake REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+
 find_package(OpenCV REQUIRED)
 
 #Messages
-add_message_files(FILES Marker.msg)
-generate_messages(DEPENDENCIES std_msgs)
+set(msg_files
+  "msg/Marker.msg"
+)
 
-#Catkin dependencies
-catkin_package(CATKIN_DEPENDS message_runtime roscpp std_msgs)
+rosidl_generate_interfaces(${PROJECT_NAME}
+  ${msg_files}
+  DEPENDENCIES builtin_interfaces std_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
+
 
 #Aruco ROS node
-add_executable(aruco src/ros/ArucoNode.cpp)
-add_dependencies(aruco aruco_generate_messages_cpp ${catkin_EXPORTED_TARGETS})
-target_link_libraries(aruco ${catkin_LIBRARIES} ${OpenCV_LIBS})
-
-#Include directories
-include_directories(include ${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
-
-#Install
-install(TARGETS aruco
-	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+add_executable(maruco src/ros/ArucoNode.cpp)
+ament_target_dependencies(
+	maruco
+	"rclcpp"
+	"cv_bridge"
+	"std_msgs"
+	"image_transport"
+	"OpenCV"
 )
+
+get_default_rmw_implementation(rmw_implementation)
+find_package("${rmw_implementation}" REQUIRED)
+get_rmw_typesupport(typesupport_impls "${rmw_implementation}" LANGUAGE "cpp")
+
+foreach(typesupport_impl ${typesupport_impls})
+  rosidl_target_interfaces(maruco
+    ${PROJECT_NAME} ${typesupport_impl}
+  )
+endforeach()
+
+
+install(TARGETS
+  maruco
+  DESTINATION lib/${PROJECT_NAME})
+
+
+ament_package()
