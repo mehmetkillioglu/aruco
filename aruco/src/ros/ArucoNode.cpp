@@ -175,7 +175,7 @@ void onFrame(const sensor_msgs::msg::Image::SharedPtr msg)
 		//Check known markers and build known of points
 		for(unsigned int i = 0; i < markers.size(); i++)
 		{
-            std::cerr << "got marker: " << markers[i].id << " markers " << std::endl;
+            //std::cerr << "got marker: " << markers[i].id << " markers " << std::endl;
             for(unsigned int j = 0; j < known.size(); j++)
 			{
 				if(markers[i].id == known[j].id)
@@ -294,7 +294,7 @@ void onFrame(const sensor_msgs::msg::Image::SharedPtr msg)
 			//Debug
 			if(debug)
 			{
-				ArucoDetector::drawOrigin(frame, found, calibration, distortion, 0.1);
+                ArucoDetector::drawOrigin(frame, found, calibration, distortion, 0.3);
 				
 				drawText(frame, "Position: " + to_string(message_position.x) + ", " + to_string(message_position.y) + ", " + to_string(message_position.z), Point2f(10, 180));
 				drawText(frame, "Rotation: " + to_string(message_rotation.x) + ", " + to_string(message_rotation.y) + ", " + to_string(message_rotation.z), Point2f(10, 200));
