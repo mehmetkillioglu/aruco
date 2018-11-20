@@ -1,3 +1,7 @@
+#!/usr/bin/python3
+# source: https://gist.github.com/eruffaldi/1e95c5fef80c0feda105 + some python3 fixes
+# no license information was available on the source
+
 import cairo,argparse,random
 
 #TEST: https://jcmellado.github.io/js-aruco/getusermedia/getusermedia.html
