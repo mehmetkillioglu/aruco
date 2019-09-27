@@ -485,7 +485,8 @@ int main(int argc, char **argv)
     rclcpp::init(argc, argv);
 
 	//ROS node instance
-    rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("maruco");
+    auto opts = rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true);
+    rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("maruco", opts);
 	
 	//Parameters
     node->get_parameter_or<bool>("debug", debug, false);
