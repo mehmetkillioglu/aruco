@@ -8,7 +8,7 @@
 #include <opencv2/calib3d/calib3d.hpp>
 
 #include "rclcpp/rclcpp.hpp"
-
+#include "rclcpp/qos.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/int32.hpp"
@@ -595,18 +595,18 @@ int main(int argc, char **argv)
               << "topic_visible: " << topic_visible << std::endl << "topic_position: " << topic_position << std::endl;
 
 	//Advertise topics
-    pub_visible = node->create_publisher<std_msgs::msg::Bool>( topic_visible, rmw_qos_profile_default);
-    pub_position = node->create_publisher<geometry_msgs::msg::Point>( topic_position, rmw_qos_profile_default);
-    pub_rotation = node->create_publisher<geometry_msgs::msg::Point>(topic_rotation, rmw_qos_profile_default);
-    pub_pose = node->create_publisher<geometry_msgs::msg::PoseStamped>( topic_pose, rmw_qos_profile_default);
+    pub_visible = node->create_publisher<std_msgs::msg::Bool>( topic_visible, rclcpp::QoS(5).best_effort());
+    pub_position = node->create_publisher<geometry_msgs::msg::Point>( topic_position, rclcpp::QoS(5).best_effort());
+    pub_rotation = node->create_publisher<geometry_msgs::msg::Point>(topic_rotation, rclcpp::QoS(5).best_effort());
+    pub_pose = node->create_publisher<geometry_msgs::msg::PoseStamped>( topic_pose, rclcpp::QoS(5).best_effort());
     //Subscribe topics
     //image_transport::ImageTransport it(node);
     //image_transport::Subscriber sub_camera = it.subscribe(topic_camera, 1, onFrame);
-    auto sub_image = node->create_subscription<sensor_msgs::msg::Image>(topic_camera, onFrame, rmw_qos_profile_default);
+    auto sub_image = node->create_subscription<sensor_msgs::msg::Image>(topic_camera, rclcpp::QoS(5).best_effort(), onFrame);
 
-    auto sub_camera_info = node->create_subscription<sensor_msgs::msg::CameraInfo>(topic_camera_info, onCameraInfo, rmw_qos_profile_default);
-    auto sub_marker_register = node->create_subscription<aruco::msg::Marker>(topic_marker_register, onMarkerRegister, rmw_qos_profile_default);
-    auto sub_marker_remove = node->create_subscription<std_msgs::msg::Int32>(topic_marker_remove, onMarkerRemove, rmw_qos_profile_default);
+    auto sub_camera_info = node->create_subscription<sensor_msgs::msg::CameraInfo>(topic_camera_info, rclcpp::QoS(5).best_effort(), onCameraInfo);
+    auto sub_marker_register = node->create_subscription<aruco::msg::Marker>(topic_marker_register, rclcpp::QoS(5).best_effort(), onMarkerRegister);
+    auto sub_marker_remove = node->create_subscription<std_msgs::msg::Int32>(topic_marker_remove, rclcpp::QoS(5).best_effort(), onMarkerRemove);
 
     rclcpp::spin(node);
 
